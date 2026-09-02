@@ -1,0 +1,149 @@
+name: REZA BOT & PLATFORM 24H LIVE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-reza:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1440
+
+    env:
+      XT_API_KEY: ${{ secrets.XT_API_KEY }}
+      XT_API_SECRET: ${{ secrets.XT_API_SECRET }}
+      XT_MARGIN_USDT: "4.0"
+      XT_LEVERAGE: "8"
+      REZA_PLATFORM_URL: "http://127.0.0.1:8788"
+      REZA_PLATFORM_ENABLED: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Prepare files
+        run: |
+          cp reza_bot_v50_7.txt reza_bot_v50_7.py
+          cp reza_execution_platform_v1.txt reza_execution_platform_v1.py
+          mkdir -p runtime_reports reza_bot_v50_7_data reza_execution_platform_v1_data
+
+      # ================================================================
+      # ✅ کانفیگ پلتفرم (اصلاح شده)
+      # ================================================================
+      - name: Create platform config
+        run: |
+          python -c "
+          import json, os
+          from pathlib import Path
+          
+          Path('reza_execution_platform_v1_data').mkdir(exist_ok=True)
+          
+          api_key = os.environ.get('XT_API_KEY', '')
+          api_secret = os.environ.get('XT_API_SECRET', '')
+          
+          if not api_key or not api_secret:
+              print('❌ API credentials not found!')
+              exit(1)
+          
+          margin = float(os.environ.get('XT_MARGIN_USDT', '4.0'))
+          leverage = int(os.environ.get('XT_LEVERAGE', '8'))
+          
+          config = {
+              'exchange': 'XT',
+              'market': 'USDT-M FUTURES',
+              'symbol': 'btc_usdt',
+              'api_key': api_key,
+              'api_secret': api_secret,
+              'margin_usdt': margin,
+              'leverage': leverage,
+              'configured': True
+          }
+          
+          with open('reza_execution_platform_v1_data/platform_config.json', 'w') as f:
+              json.dump(config, f, indent=2)
+          
+          print('✅ Platform config created')
+          print(f'   API KEY: {api_key[:8]}...')
+          print(f'   Margin: {margin} USDT')
+          print(f'   Leverage: {leverage}x')
+          "
+
+      # ================================================================
+      # ✅ مرحله 1: ربات
+      # ================================================================
+      - name: Start Bot
+        run: |
+          echo "🚀 Starting Bot..."
+          nohup python -u reza_bot_v50_7.py > runtime_reports/bot.log 2>&1 &
+          echo $! > runtime_reports/bot.pid
+          
+          sleep 5
+          for i in $(seq 1 10); do
+            if curl -fsS http://127.0.0.1:8765/health > /dev/null 2>&1; then
+              echo "✅ Webhook Server ready"
+              break
+            fi
+            sleep 1
+          done
+
+      # ================================================================
+      # ✅ مرحله 2: پلتفرم
+      # ================================================================
+      - name: Start Platform
+        run: |
+          echo "🚀 Starting Platform..."
+          nohup python -u reza_execution_platform_v1.py > runtime_reports/platform.log 2>&1 &
+          echo $! > runtime_reports/platform.pid
+          
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8788/health > /dev/null 2>&1; then
+              echo "✅ Platform ready (attempt $i)"
+              break
+            fi
+            if [ $((i % 5)) -eq 0 ]; then
+              echo "⏳ Waiting for platform... ($i/60)"
+            fi
+            sleep 1
+          done
+          
+          echo ""
+          echo "===== PLATFORM LOG ====="
+          cat runtime_reports/platform.log
+          echo "========================"
+          
+          curl -fsS http://127.0.0.1:8788/health || {
+            echo "❌ Platform failed to start"
+            exit 1
+          }
+
+      # ================================================================
+      # ✅ مرحله 3: لاگ لایو
+      # ================================================================
+      - name: Live Logs
+        run: |
+          echo "=============================================="
+          echo "🔥 REZA 24H LIVE"
+          echo "=============================================="
+          
+          tail -n 0 -F runtime_reports/bot.log | while read line; do echo "[BOT] $line"; done &
+          tail -n 0 -F runtime_reports/platform.log | while read line; do echo "[PLATFORM] $line"; done &
+          
+          while true; do sleep 10; done
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: |
+            runtime_reports/
+            reza_bot_v50_7_data/
+            reza_execution_platform_v1_data/
+          retention-days: 30
