@@ -1,32 +1,21 @@
 #!/bin/bash
 # ============================================================================
-# REZA BOT — ALO WORKFLOW
+# REZA BOT — ALO WORKFLOW (PORT 8790)
 # ============================================================================
-#
-# BOT      : reza_bot_v50_7_alo.txt     (PORT 8790)
-# PLATFORM : reza_execution_platform_v1_alo.txt  (PORT 8790)
-#
-# USAGE: ./run_alo.sh [start|stop|status|logs]
-# ============================================================================
-
-# ============================================================================
-# CONFIGURATION
+# 
+# COMMANDS: ./run_alo.sh {start|stop|status|logs|help}
 # ============================================================================
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$PROJECT_DIR/logs"
 PID_DIR="$PROJECT_DIR/pids"
 
-BOT_FILE="reza_bot_v50_7_alo.txt"
-PLATFORM_FILE="reza_execution_platform_v1_alo.txt"
+BOT_FILE="reza_bot_v50_7.txt"
+PLATFORM_FILE="reza_execution_platform_v1.txt"
 PORT=8790
 
 BOT_NAME="bot_alo"
 PLATFORM_NAME="platform_alo"
-
-# ============================================================================
-# COLORS
-# ============================================================================
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -34,10 +23,6 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
-
-# ============================================================================
-# FUNCTIONS
-# ============================================================================
 
 setup_dirs() {
     mkdir -p "$LOG_DIR" "$PID_DIR"
@@ -108,10 +93,6 @@ stop_process() {
     echo -e "${GREEN}✅ $name stopped${NC}"
 }
 
-# ============================================================================
-# COMMANDS
-# ============================================================================
-
 start_all() {
     setup_dirs
     echo ""
@@ -125,7 +106,6 @@ start_all() {
     start_process "$PLATFORM_NAME" "$PLATFORM_FILE"
     
     echo ""
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     status_all
 }
 
@@ -175,10 +155,6 @@ show_logs() {
     fi
 }
 
-# ============================================================================
-# HELP
-# ============================================================================
-
 show_help() {
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
@@ -188,22 +164,18 @@ show_help() {
     echo -e "${YELLOW}USAGE:${NC} $0 {start|stop|status|logs|help}"
     echo ""
     echo -e "${YELLOW}COMMANDS:${NC}"
-    echo "  start    Start bot + platform"
-    echo "  stop     Stop bot + platform"
-    echo "  status   Show status"
-    echo "  logs     Show logs (bot_alo by default)"
-    echo "  logs bot Show bot logs"
-    echo "  logs plat Show platform logs"
-    echo "  help     Show this help"
+    echo "  start        Start bot + platform"
+    echo "  stop         Stop bot + platform"
+    echo "  status       Show status"
+    echo "  logs         Show bot logs"
+    echo "  logs bot     Show bot logs"
+    echo "  logs plat    Show platform logs"
+    echo "  help         Show this help"
     echo ""
     echo -e "${YELLOW}PORTS:${NC} $PORT"
     echo -e "${YELLOW}HEALTH:${NC} http://127.0.0.1:$PORT/health"
     echo ""
 }
-
-# ============================================================================
-# MAIN
-# ============================================================================
 
 case "${1:-help}" in
     start)
