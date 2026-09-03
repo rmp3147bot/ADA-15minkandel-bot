@@ -1,10 +1,10 @@
-name: REZA BOT & PLATFORM 24H LIVE
+name: REZA BOT & PLATFORM ALO 24H LIVE
 
 on:
   workflow_dispatch:
 
 jobs:
-  run-reza:
+  run-reza-alo:
     runs-on: ubuntu-latest
     timeout-minutes: 1440
 
@@ -34,9 +34,6 @@ jobs:
           cp reza_execution_platform_v1.txt reza_execution_platform_v1.py
           mkdir -p runtime_reports reza_bot_v50_7_data reza_execution_platform_v1_data
 
-      # ================================================================
-      # ✅ کانفیگ پلتفرم (اصلاح شده)
-      # ================================================================
       - name: Create platform config
         run: |
           python -c "
@@ -58,7 +55,7 @@ jobs:
           config = {
               'exchange': 'XT',
               'market': 'USDT-M FUTURES',
-              'symbol': 'btc_usdt',
+              'symbol': 'allo_usdt',
               'api_key': api_key,
               'api_secret': api_secret,
               'margin_usdt': margin,
@@ -71,16 +68,14 @@ jobs:
           
           print('✅ Platform config created')
           print(f'   API KEY: {api_key[:8]}...')
+          print(f'   Symbol: allo_usdt')
           print(f'   Margin: {margin} USDT')
           print(f'   Leverage: {leverage}x')
           "
 
-      # ================================================================
-      # ✅ مرحله 1: ربات
-      # ================================================================
       - name: Start Bot
         run: |
-          echo "🚀 Starting Bot..."
+          echo "🚀 Starting ALO Bot..."
           nohup python -u reza_bot_v50_7.py > runtime_reports/bot.log 2>&1 &
           echo $! > runtime_reports/bot.pid
           
@@ -93,17 +88,14 @@ jobs:
             sleep 1
           done
 
-      # ================================================================
-      # ✅ مرحله 2: پلتفرم
-      # ================================================================
       - name: Start Platform
         run: |
-          echo "🚀 Starting Platform..."
+          echo "🚀 Starting ALO Platform..."
           nohup python -u reza_execution_platform_v1.py > runtime_reports/platform.log 2>&1 &
           echo $! > runtime_reports/platform.pid
           
           for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8788/health > /dev/null 2>&1; then
+            if curl -fsS http://127.0.0.1:8790/health > /dev/null 2>&1; then
               echo "✅ Platform ready (attempt $i)"
               break
             fi
@@ -118,18 +110,15 @@ jobs:
           cat runtime_reports/platform.log
           echo "========================"
           
-          curl -fsS http://127.0.0.1:8788/health || {
+          curl -fsS http://127.0.0.1:8790/health || {
             echo "❌ Platform failed to start"
             exit 1
           }
 
-      # ================================================================
-      # ✅ مرحله 3: لاگ لایو
-      # ================================================================
       - name: Live Logs
         run: |
           echo "=============================================="
-          echo "🔥 REZA 24H LIVE"
+          echo "🔥 REZA ALO 24H LIVE (PORT 8790)"
           echo "=============================================="
           
           tail -n 0 -F runtime_reports/bot.log | while read line; do echo "[BOT] $line"; done &
@@ -141,7 +130,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: logs
+          name: logs-alo
           path: |
             runtime_reports/
             reza_bot_v50_7_data/
