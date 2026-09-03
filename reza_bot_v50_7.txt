@@ -123,7 +123,7 @@ ATR_MULTIPLIER = 2.5          # ⚠️ نوسان خیلی بالا
 
 PLATFORM_BASE_URL = os.getenv(
     "REZA_PLATFORM_URL",
-    "http://127.0.0.1:8789"
+    "http://127.0.0.1:8788"
 ).rstrip("/")
 
 PLATFORM_HEALTH_PATH = "/health"
