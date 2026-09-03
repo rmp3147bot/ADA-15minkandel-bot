@@ -1,208 +1,83 @@
-#!/bin/bash
-# ============================================================================
-# REZA BOT — ALO WORKFLOW (PORT 8790)
-# ============================================================================
-# 
-# COMMANDS: ./run_alo.sh {start|stop|status|logs|help}
-# ============================================================================
+# .github/workflows/main.yml
+name: REZA BOT - ALO Workflow
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_DIR="$PROJECT_DIR/logs"
-PID_DIR="$PROJECT_DIR/pids"
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Command to run (start|stop|status|logs)'
+        required: true
+        default: 'start'
+        type: choice
+        options:
+          - start
+          - stop
+          - status
+          - logs
 
-BOT_FILE="reza_bot_v50_7.txt"
-PLATFORM_FILE="reza_execution_platform_v1.txt"
-PORT=8790
-
-BOT_NAME="bot_alo"
-PLATFORM_NAME="platform_alo"
-
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-setup_dirs() {
-    mkdir -p "$LOG_DIR" "$PID_DIR"
-}
-
-get_pid() {
-    local pid_file="$PID_DIR/${1}.pid"
-    [ -f "$pid_file" ] && cat "$pid_file" || echo ""
-}
-
-is_running() {
-    local pid=$(get_pid "$1")
-    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
-}
-
-check_health() {
-    curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/health" --connect-timeout 3 2>/dev/null | grep -q "200"
-}
-
-start_process() {
-    local name=$1
-    local file=$2
+jobs:
+  alo-bot:
+    runs-on: ubuntu-latest
     
-    echo -e "${BLUE}▶ Starting $name...${NC}"
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
     
-    if is_running "$name"; then
-        echo -e "${YELLOW}⚠️  $name already running (PID: $(get_pid "$name"))${NC}"
-        return 1
-    fi
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
     
-    cd "$PROJECT_DIR"
-    nohup python3 "$file" >> "$LOG_DIR/${name}.log" 2>&1 &
-    local pid=$!
-    echo $pid > "$PID_DIR/${name}.pid"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
     
-    sleep 2
+    - name: Create directories
+      run: |
+        mkdir -p logs pids
     
-    if check_health; then
-        echo -e "${GREEN}✅ $name started (PID: $pid)${NC}"
-        return 0
-    else
-        echo -e "${RED}❌ $name failed (check: $LOG_DIR/${name}.log)${NC}"
-        return 1
-    fi
-}
-
-stop_process() {
-    local name=$1
-    local pid=$(get_pid "$name")
-    
-    if [ -z "$pid" ]; then
-        echo -e "${YELLOW}⚠️  $name not running${NC}"
-        return 1
-    fi
-    
-    echo -e "${BLUE}■ Stopping $name (PID: $pid)...${NC}"
-    kill "$pid" 2>/dev/null
-    
-    local count=0
-    while kill -0 "$pid" 2>/dev/null && [ $count -lt 5 ]; do
-        sleep 1
-        count=$((count + 1))
-    done
-    
-    kill -9 "$pid" 2>/dev/null
-    rm -f "$PID_DIR/${name}.pid"
-    
-    echo -e "${GREEN}✅ $name stopped${NC}"
-}
-
-start_all() {
-    setup_dirs
-    echo ""
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}  🚀 STARTING ALO SYSTEM (PORT $PORT)${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo ""
-    
-    start_process "$BOT_NAME" "$BOT_FILE"
-    sleep 1
-    start_process "$PLATFORM_NAME" "$PLATFORM_FILE"
-    
-    echo ""
-    status_all
-}
-
-stop_all() {
-    echo ""
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}  🛑 STOPPING ALO SYSTEM${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo ""
-    
-    stop_process "$PLATFORM_NAME"
-    stop_process "$BOT_NAME"
-    
-    echo -e "${GREEN}✅ All stopped${NC}"
-}
-
-status_all() {
-    echo ""
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}  📊 ALO SYSTEM STATUS${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo ""
-    
-    for name in "$BOT_NAME" "$PLATFORM_NAME"; do
-        if is_running "$name"; then
-            echo -e "  ${GREEN}●${NC} $name : ${GREEN}running${NC} (PID: $(get_pid "$name"))"
-        else
-            echo -e "  ${RED}○${NC} $name : ${RED}stopped${NC}"
+    - name: Run ALO Bot
+      env:
+        XT_API_KEY: ${{ secrets.XT_API_KEY }}
+        XT_API_SECRET: ${{ secrets.XT_API_SECRET }}
+        XT_MARGIN_USDT: 4.0
+        XT_LEVERAGE: 8
+      run: |
+        if [ "${{ github.event.inputs.command }}" == "start" ] || [ "${{ github.event.inputs.command }}" == "" ]; then
+          echo "🚀 Starting ALO Bot..."
+          python reza_bot_v50_7.txt &
+          sleep 3
+          python reza_execution_platform_v1.txt &
+          sleep 3
+          echo "✅ ALO System Started"
+        elif [ "${{ github.event.inputs.command }}" == "stop" ]; then
+          echo "🛑 Stopping ALO Bot..."
+          pkill -f "reza_bot_v50_7.txt" || true
+          pkill -f "reza_execution_platform_v1.txt" || true
+          echo "✅ ALO System Stopped"
+        elif [ "${{ github.event.inputs.command }}" == "status" ]; then
+          echo "📊 ALO System Status:"
+          ps aux | grep -E "reza_bot_v50_7|reza_execution_platform_v1" | grep -v grep || echo "No processes running"
+        elif [ "${{ github.event.inputs.command }}" == "logs" ]; then
+          echo "📋 Logs will be shown below:"
+          tail -f logs/*.log 2>/dev/null || echo "No logs found"
         fi
-    done
     
-    echo ""
-    echo -e "  ${BLUE}PORT:${NC} $PORT"
-    echo -e "  ${BLUE}HEALTH:${NC} http://127.0.0.1:$PORT/health"
-    echo ""
-}
-
-show_logs() {
-    local name=$1
-    [ -z "$name" ] && name="$BOT_NAME"
+    - name: Upload logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: alo-logs
+        path: logs/
+        retention-days: 7
     
-    local log_file="$LOG_DIR/${name}.log"
-    if [ -f "$log_file" ]; then
-        tail -f "$log_file"
-    else
-        echo -e "${RED}❌ Log not found: $log_file${NC}"
-    fi
-}
-
-show_help() {
-    echo ""
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}  REZA BOT — ALO WORKFLOW${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo ""
-    echo -e "${YELLOW}USAGE:${NC} $0 {start|stop|status|logs|help}"
-    echo ""
-    echo -e "${YELLOW}COMMANDS:${NC}"
-    echo "  start        Start bot + platform"
-    echo "  stop         Stop bot + platform"
-    echo "  status       Show status"
-    echo "  logs         Show bot logs"
-    echo "  logs bot     Show bot logs"
-    echo "  logs plat    Show platform logs"
-    echo "  help         Show this help"
-    echo ""
-    echo -e "${YELLOW}PORTS:${NC} $PORT"
-    echo -e "${YELLOW}HEALTH:${NC} http://127.0.0.1:$PORT/health"
-    echo ""
-}
-
-case "${1:-help}" in
-    start)
-        start_all
-        ;;
-    stop)
-        stop_all
-        ;;
-    status)
-        status_all
-        ;;
-    logs)
-        case "$2" in
-            bot|plat|platform)
-                show_logs "$2"
-                ;;
-            *)
-                show_logs "$BOT_NAME"
-                ;;
-        esac
-        ;;
-    help|--help|-h)
-        show_help
-        ;;
-    *)
-        echo -e "${RED}❌ Unknown command: $1${NC}"
-        show_help
-        exit 1
-        ;;
-esac
+    - name: Keep workflow alive
+      if: github.event.inputs.command == 'start'
+      run: |
+        echo "⏳ Keeping workflow alive..."
+        sleep 3600
