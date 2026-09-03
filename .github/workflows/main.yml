@@ -1,161 +1,236 @@
-name: REZA BOT & PLATFORM 24H LIVE
+#!/bin/bash
+# ============================================================================
+# REZA BOT — ALO WORKFLOW
+# ============================================================================
+#
+# BOT      : reza_bot_v50_7_alo.txt     (PORT 8790)
+# PLATFORM : reza_execution_platform_v1_alo.txt  (PORT 8790)
+#
+# USAGE: ./run_alo.sh [start|stop|status|logs]
+# ============================================================================
 
-on:
-  workflow_dispatch:
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
 
-jobs:
-  run-reza:
-    runs-on: ubuntu-latest
-    timeout-minutes: 1440
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="$PROJECT_DIR/logs"
+PID_DIR="$PROJECT_DIR/pids"
 
-    env:
-      XT_API_KEY: ${{ secrets.XT_API_KEY }}
-      XT_API_SECRET: ${{ secrets.XT_API_SECRET }}
-      XT_MARGIN_USDT: "4.0"
-      XT_LEVERAGE: "8"
-      REZA_PLATFORM_URL: "http://127.0.0.1:8789"
-      REZA_PLATFORM_ENABLED: "1"
-      PYTHONUNBUFFERED: "1"
+BOT_FILE="reza_bot_v50_7_alo.txt"
+PLATFORM_FILE="reza_execution_platform_v1_alo.txt"
+PORT=8790
 
-    steps:
-      - uses: actions/checkout@v4
+BOT_NAME="bot_alo"
+PLATFORM_NAME="platform_alo"
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+# ============================================================================
+# COLORS
+# ============================================================================
 
-      - name: Install dependencies
-        run: pip install requests
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
 
-      - name: Prepare files
-        run: |
-          cp reza_bot_v50_7.txt reza_bot_v50_7.py
-          cp reza_execution_platform_v1.txt reza_execution_platform_v1.py
-          mkdir -p runtime_reports reza_bot_v50_7_data reza_execution_platform_v1_data
+# ============================================================================
+# FUNCTIONS
+# ============================================================================
 
-      # ================================================================
-      # ✅ کانفیگ پلتفرم
-      # ================================================================
-      - name: Create platform config
-        run: |
-          python -c "
-          import json, os
-          from pathlib import Path
-          
-          Path('reza_execution_platform_v1_data').mkdir(exist_ok=True)
-          
-          api_key = os.environ.get('XT_API_KEY', '')
-          api_secret = os.environ.get('XT_API_SECRET', '')
-          
-          if not api_key or not api_secret:
-              print('❌ API credentials not found!')
-              exit(1)
-          
-          margin = float(os.environ.get('XT_MARGIN_USDT', '4.0'))
-          leverage = int(os.environ.get('XT_LEVERAGE', '8'))
-          
-          config = {
-              'exchange': 'XT',
-              'market': 'USDT-M FUTURES',
-              'symbol': 'btc_usdt',
-              'api_key': api_key,
-              'api_secret': api_secret,
-              'margin_usdt': margin,
-              'leverage': leverage,
-              'configured': True
-          }
-          
-          with open('reza_execution_platform_v1_data/platform_config.json', 'w') as f:
-              json.dump(config, f, indent=2)
-          
-          print('✅ Platform config created')
-          print(f'   API KEY: {api_key[:8]}...')
-          print(f'   Margin: {margin} USDT')
-          print(f'   Leverage: {leverage}x')
-          "
+setup_dirs() {
+    mkdir -p "$LOG_DIR" "$PID_DIR"
+}
 
-      # ================================================================
-      # ✅ تغییر پورت پلتفرم به 8789
-      # ================================================================
-      - name: Change platform port to 8789
-        run: |
-          sed -i 's/PLATFORM_PORT = 8787/PLATFORM_PORT = 8789/g' reza_execution_platform_v1.py
-          sed -i 's/PLATFORM_PORT = 8788/PLATFORM_PORT = 8789/g' reza_execution_platform_v1.py
-          echo "✅ Platform port changed to 8789"
+get_pid() {
+    local pid_file="$PID_DIR/${1}.pid"
+    [ -f "$pid_file" ] && cat "$pid_file" || echo ""
+}
 
-      # ================================================================
-      # ✅ مرحله 1: ربات (Webhook Server در 8765)
-      # ================================================================
-      - name: Start Bot
-        run: |
-          echo "🚀 Starting Bot..."
-          nohup python -u reza_bot_v50_7.py > runtime_reports/bot.log 2>&1 &
-          echo $! > runtime_reports/bot.pid
-          
-          sleep 5
-          for i in $(seq 1 10); do
-            if curl -fsS http://127.0.0.1:8765/health > /dev/null 2>&1; then
-              echo "✅ Webhook Server ready"
-              break
-            fi
-            sleep 1
-          done
+is_running() {
+    local pid=$(get_pid "$1")
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
 
-      # ================================================================
-      # ✅ مرحله 2: پلتفرم روی پورت 8789
-      # ================================================================
-      - name: Start Platform
-        run: |
-          echo "🚀 Starting Platform on port 8789..."
-          nohup python -u reza_execution_platform_v1.py > runtime_reports/platform.log 2>&1 &
-          echo $! > runtime_reports/platform.pid
-          
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8789/health > /dev/null 2>&1; then
-              echo "✅ Platform ready (attempt $i)"
-              break
-            fi
-            if [ $((i % 5)) -eq 0 ]; then
-              echo "⏳ Waiting for platform on 8789... ($i/60)"
-            fi
-            sleep 1
-          done
-          
-          echo ""
-          echo "===== PLATFORM LOG ====="
-          cat runtime_reports/platform.log
-          echo "========================"
-          
-          curl -fsS http://127.0.0.1:8789/health || {
-            echo "❌ Platform failed to start on port 8789"
-            exit 1
-          }
+check_health() {
+    curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/health" --connect-timeout 3 2>/dev/null | grep -q "200"
+}
 
-      # ================================================================
-      # ✅ مرحله 3: لاگ لایو
-      # ================================================================
-      - name: Live Logs
-        run: |
-          echo "=============================================="
-          echo "🔥 REZA 24H LIVE"
-          echo "=============================================="
-          echo "BOT      : http://127.0.0.1:8765 (Webhook)"
-          echo "PLATFORM : http://127.0.0.1:8789"
-          echo "=============================================="
-          
-          tail -n 0 -F runtime_reports/bot.log | while read line; do echo "[BOT] $line"; done &
-          tail -n 0 -F runtime_reports/platform.log | while read line; do echo "[PLATFORM] $line"; done &
-          
-          while true; do sleep 10; done
+start_process() {
+    local name=$1
+    local file=$2
+    
+    echo -e "${BLUE}▶ Starting $name...${NC}"
+    
+    if is_running "$name"; then
+        echo -e "${YELLOW}⚠️  $name already running (PID: $(get_pid "$name"))${NC}"
+        return 1
+    fi
+    
+    cd "$PROJECT_DIR"
+    nohup python3 "$file" >> "$LOG_DIR/${name}.log" 2>&1 &
+    local pid=$!
+    echo $pid > "$PID_DIR/${name}.pid"
+    
+    sleep 2
+    
+    if check_health; then
+        echo -e "${GREEN}✅ $name started (PID: $pid)${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ $name failed (check: $LOG_DIR/${name}.log)${NC}"
+        return 1
+    fi
+}
 
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: logs
-          path: |
-            runtime_reports/
-            reza_bot_v50_7_data/
-            reza_execution_platform_v1_data/
-          retention-days: 30
+stop_process() {
+    local name=$1
+    local pid=$(get_pid "$name")
+    
+    if [ -z "$pid" ]; then
+        echo -e "${YELLOW}⚠️  $name not running${NC}"
+        return 1
+    fi
+    
+    echo -e "${BLUE}■ Stopping $name (PID: $pid)...${NC}"
+    kill "$pid" 2>/dev/null
+    
+    local count=0
+    while kill -0 "$pid" 2>/dev/null && [ $count -lt 5 ]; do
+        sleep 1
+        count=$((count + 1))
+    done
+    
+    kill -9 "$pid" 2>/dev/null
+    rm -f "$PID_DIR/${name}.pid"
+    
+    echo -e "${GREEN}✅ $name stopped${NC}"
+}
+
+# ============================================================================
+# COMMANDS
+# ============================================================================
+
+start_all() {
+    setup_dirs
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}  🚀 STARTING ALO SYSTEM (PORT $PORT)${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+    
+    start_process "$BOT_NAME" "$BOT_FILE"
+    sleep 1
+    start_process "$PLATFORM_NAME" "$PLATFORM_FILE"
+    
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    status_all
+}
+
+stop_all() {
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}  🛑 STOPPING ALO SYSTEM${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+    
+    stop_process "$PLATFORM_NAME"
+    stop_process "$BOT_NAME"
+    
+    echo -e "${GREEN}✅ All stopped${NC}"
+}
+
+status_all() {
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}  📊 ALO SYSTEM STATUS${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+    
+    for name in "$BOT_NAME" "$PLATFORM_NAME"; do
+        if is_running "$name"; then
+            echo -e "  ${GREEN}●${NC} $name : ${GREEN}running${NC} (PID: $(get_pid "$name"))"
+        else
+            echo -e "  ${RED}○${NC} $name : ${RED}stopped${NC}"
+        fi
+    done
+    
+    echo ""
+    echo -e "  ${BLUE}PORT:${NC} $PORT"
+    echo -e "  ${BLUE}HEALTH:${NC} http://127.0.0.1:$PORT/health"
+    echo ""
+}
+
+show_logs() {
+    local name=$1
+    [ -z "$name" ] && name="$BOT_NAME"
+    
+    local log_file="$LOG_DIR/${name}.log"
+    if [ -f "$log_file" ]; then
+        tail -f "$log_file"
+    else
+        echo -e "${RED}❌ Log not found: $log_file${NC}"
+    fi
+}
+
+# ============================================================================
+# HELP
+# ============================================================================
+
+show_help() {
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}  REZA BOT — ALO WORKFLOW${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "${YELLOW}USAGE:${NC} $0 {start|stop|status|logs|help}"
+    echo ""
+    echo -e "${YELLOW}COMMANDS:${NC}"
+    echo "  start    Start bot + platform"
+    echo "  stop     Stop bot + platform"
+    echo "  status   Show status"
+    echo "  logs     Show logs (bot_alo by default)"
+    echo "  logs bot Show bot logs"
+    echo "  logs plat Show platform logs"
+    echo "  help     Show this help"
+    echo ""
+    echo -e "${YELLOW}PORTS:${NC} $PORT"
+    echo -e "${YELLOW}HEALTH:${NC} http://127.0.0.1:$PORT/health"
+    echo ""
+}
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+case "${1:-help}" in
+    start)
+        start_all
+        ;;
+    stop)
+        stop_all
+        ;;
+    status)
+        status_all
+        ;;
+    logs)
+        case "$2" in
+            bot|plat|platform)
+                show_logs "$2"
+                ;;
+            *)
+                show_logs "$BOT_NAME"
+                ;;
+        esac
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        echo -e "${RED}❌ Unknown command: $1${NC}"
+        show_help
+        exit 1
+        ;;
+esac
