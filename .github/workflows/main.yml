@@ -1,10 +1,10 @@
-name: REZA BOT & PLATFORM ALO 24H LIVE
+name: REZA BOT & PLATFORM 24H LIVE
 
 on:
   workflow_dispatch:
 
 jobs:
-  run-reza-alo:
+  run-reza:
     runs-on: ubuntu-latest
     timeout-minutes: 1440
 
@@ -34,6 +34,9 @@ jobs:
           cp reza_execution_platform_v1.txt reza_execution_platform_v1.py
           mkdir -p runtime_reports reza_bot_v50_7_data reza_execution_platform_v1_data
 
+      # ================================================================
+      # ✅ کانفیگ پلتفرم (اصلاح شده)
+      # ================================================================
       - name: Create platform config
         run: |
           python -c "
@@ -55,7 +58,7 @@ jobs:
           config = {
               'exchange': 'XT',
               'market': 'USDT-M FUTURES',
-              'symbol': 'alo_usdt',
+              'symbol': 'btc_usdt',
               'api_key': api_key,
               'api_secret': api_secret,
               'margin_usdt': margin,
@@ -72,9 +75,12 @@ jobs:
           print(f'   Leverage: {leverage}x')
           "
 
+      # ================================================================
+      # ✅ مرحله 1: ربات
+      # ================================================================
       - name: Start Bot
         run: |
-          echo "🚀 Starting ALO Bot..."
+          echo "🚀 Starting Bot..."
           nohup python -u reza_bot_v50_7.py > runtime_reports/bot.log 2>&1 &
           echo $! > runtime_reports/bot.pid
           
@@ -87,14 +93,17 @@ jobs:
             sleep 1
           done
 
+      # ================================================================
+      # ✅ مرحله 2: پلتفرم
+      # ================================================================
       - name: Start Platform
         run: |
-          echo "🚀 Starting ALO Platform..."
+          echo "🚀 Starting Platform..."
           nohup python -u reza_execution_platform_v1.py > runtime_reports/platform.log 2>&1 &
           echo $! > runtime_reports/platform.pid
           
           for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8790/health > /dev/null 2>&1; then
+            if curl -fsS http://127.0.0.1:8788/health > /dev/null 2>&1; then
               echo "✅ Platform ready (attempt $i)"
               break
             fi
@@ -109,15 +118,18 @@ jobs:
           cat runtime_reports/platform.log
           echo "========================"
           
-          curl -fsS http://127.0.0.1:8790/health || {
+          curl -fsS http://127.0.0.1:8788/health || {
             echo "❌ Platform failed to start"
             exit 1
           }
 
+      # ================================================================
+      # ✅ مرحله 3: لاگ لایو
+      # ================================================================
       - name: Live Logs
         run: |
           echo "=============================================="
-          echo "🔥 REZA ALO 24H LIVE (PORT 8790)"
+          echo "🔥 REZA 24H LIVE"
           echo "=============================================="
           
           tail -n 0 -F runtime_reports/bot.log | while read line; do echo "[BOT] $line"; done &
@@ -129,7 +141,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: logs-alo
+          name: logs
           path: |
             runtime_reports/
             reza_bot_v50_7_data/
