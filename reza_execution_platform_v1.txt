@@ -65,7 +65,7 @@ DISPLAY_SYMBOL = "ALOUSDT"
 # ============================================================================
 
 PLATFORM_HOST = "127.0.0.1"
-PLATFORM_PORT = 8790
+PLATFORM_PORT = 8788
 
 BOT_SIGNAL_PATH = "/signal"
 
