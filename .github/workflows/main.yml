@@ -13,7 +13,7 @@ jobs:
       XT_API_SECRET: ${{ secrets.XT_API_SECRET }}
       XT_MARGIN_USDT: "4.0"
       XT_LEVERAGE: "8"
-      REZA_PLATFORM_URL: "http://127.0.0.1:8790"
+      REZA_PLATFORM_URL: "http://127.0.0.1:8788"
       REZA_PLATFORM_ENABLED: "1"
       PYTHONUNBUFFERED: "1"
 
