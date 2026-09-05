@@ -190,8 +190,8 @@ DEFAULT_CONFIG = {
     "symbol": XT_SYMBOL,
     "api_key": "",
     "api_secret": "",
-    "margin_usdt": 2.0,
-    "leverage": 8,
+    "margin_usdt": 4.0,
+    "leverage": 20,
     "configured": False
 }
 
